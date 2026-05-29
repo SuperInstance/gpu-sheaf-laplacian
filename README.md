@@ -1,66 +1,54 @@
 # gpu-sheaf-laplacian
 
-CUDA library for computing **sheaf Laplacians** on GPU, built for the RTX 4050 (sm_89).
+**CUDA sheaf Laplacian computation — distance matrices, CSR adjacency, spectral invariants, and power iteration eigenvalues, all on GPU.**
 
-Implements the full pipeline from point cloud → distance matrix → adjacency → sheaf Laplacian → eigenvalues → spectral invariants.
+Builds sheaf Laplacians from point cloud data entirely on the GPU. Computes tiled pairwise distances, epsilon-threshold CSR adjacency, Gaussian kernel weights, and the sheaf Laplacian (which encodes both geometric distance and stalk restriction maps). Extracts spectral invariants: spectral radius, gap, eigenvalue spread, trace.
 
-Based on experimental results (R²=0.993) showing continuous spectral invariants predict MoE generalization.
+## What This Gives You
 
-## Pipeline
+- **Tiled distance matrix** — pairwise Euclidean distances via shared-memory tiling
+- **CSR adjacency** — epsilon-threshold with Gaussian kernel weights
+- **Sheaf Laplacian** — L_F = D - W modified by stalk features
+- **Power iteration eigenvalues** — top-k eigenvalues with deflation
+- **Spectral invariants** — radius, gap, spread, trace, all on GPU
+- **Benchmarking suite** — GPU vs CPU scaling comparison
 
-1. **Distance Matrix** — Tiled pairwise Euclidean distances using shared memory
-2. **Adjacency** — ε-threshold sparse adjacency in CSR format with Gaussian kernel weights
-3. **Sheaf Laplacian** — Constructs restriction maps from stalk similarity (scalar stalks)
-4. **Eigenvalues** — Power iteration with deflation for top-k eigenvalues
-5. **Spectral Invariants** — Spectral radius, gap, spread, trace, minimum eigenvalue
+## Quick Start
 
-## Requirements
-
-- CUDA 12.6+
-- RTX 4050 (sm_89) or compatible GPU
-- nvcc with C++17 support
-
-## Build & Test
-
-```bash
-make test
-```
-
-## Architecture
-
-```
-include/sheaf_laplacian.cuh     — Public API header
-src/distance_matrix.cu          — Tiled pairwise distances
-src/adjacency.cu                — ε-threshold CSR adjacency
-src/laplacian.cu                — Sheaf Laplacian construction
-src/eigenvalues.cu              — Power iteration + deflation
-src/spectral_invariants.cu      — Spectral invariants
-tests/test_correctness.cu       — 8 test cases
-```
-
-## Usage
-
-```cpp
+```cuda
 #include "sheaf_laplacian.cuh"
 
-// 1. Distance matrix
-compute_distance_matrix(d_points, d_dist, N, D);
+// Distance matrix
+compute_distance_matrix(d_points, d_dist, N, D, stream);
 
-// 2. Adjacency
-build_adjacency_csr(d_dist, N, epsilon, &d_row_ptr, &d_col_idx, &d_weights, &nnz);
+// Adjacency (CSR)
+build_adjacency_csr(d_dist, N, epsilon, &d_row_ptr, &d_col_idx, &d_weights, &nnz, stream);
 
-// 3. Sheaf Laplacian
-build_sheaf_laplacian(d_dist, d_row_ptr, d_col_idx, d_weights, N, nnz, d_laplacian);
+// Sheaf Laplacian
+build_sheaf_laplacian(d_dist, d_row_ptr, d_col_idx, d_weights, N, nnz, d_laplacian, stream);
 
-// 4. Eigenvalues (top-k)
-compute_eigenvalues(d_laplacian, N, k, d_eigenvalues);
+// Eigenvalues
+compute_eigenvalues(d_laplacian, N, k, d_eigenvalues, stream);
 
-// 5. Spectral invariants
-compute_spectral_invariants(d_eigenvalues, k, &sr, &sg, &spread, &trace, &min_eig);
+// Spectral invariants
+compute_spectral_invariants(d_eigenvalues, k, &radius, &gap, &spread, &trace, stream);
 ```
+
+## Build
+
+```bash
+nvcc -O3 -o test_correctness tests/test_correctness.cu src/*.cu
+nvcc -O3 -o benchmark bench/benchmark.cu src/*.cu
+./test_correctness && ./benchmark
+```
+
+## How It Fits
+
+Part of the SuperInstance ecosystem:
+
+- **[persistent-sheaf](https://github.com/SuperInstance/persistent-sheaf)** — Rust sheaf cohomology
+- **gpu-sheaf-laplacian** — CUDA-accelerated sheaf Laplacian (this repo)
 
 ## License
 
 MIT
-
-Part of the [SuperInstance OpenConstruct](https://github.com/SuperInstance/OpenConstruct) ecosystem.
